@@ -1,0 +1,22 @@
+# Node / Next.js
+fpl-dashboard/node_modules/
+fpl-dashboard/.next/
+fpl-dashboard/out/
+fpl-dashboard/.env*.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VS Code
+*.code-workspace
+.vscode/

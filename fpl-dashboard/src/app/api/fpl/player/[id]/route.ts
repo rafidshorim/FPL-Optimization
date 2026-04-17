@@ -1,0 +1,36 @@
+import { NextResponse } from "next/server";
+
+const FPL_BASE = "https://fantasy.premierleague.com/api";
+
+export async function GET(
+  _req: Request,
+  { params }: { params: { id: string } }
+) {
+  const { id } = params;
+
+  if (!id || isNaN(Number(id))) {
+    return NextResponse.json({ error: "invalid_id" }, { status: 400 });
+  }
+
+  try {
+    const res = await fetch(`${FPL_BASE}/element-summary/${id}/`, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; FPLDashboard/1.0)" },
+      next: { revalidate: 120 },
+    });
+
+    if (!res.ok) {
+      return NextResponse.json(
+        { error: "upstream_error", message: `FPL API returned ${res.status}` },
+        { status: res.status === 404 ? 404 : 502 }
+      );
+    }
+
+    const data = await res.json();
+    return NextResponse.json(data, {
+      headers: { "Cache-Control": "s-maxage=120, stale-while-revalidate=30" },
+    });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    return NextResponse.json({ error: "upstream_error", message }, { status: 502 });
+  }
+}
