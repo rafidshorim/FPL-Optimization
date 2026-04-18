@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 const FPL_BASE = "https://fantasy.premierleague.com/api";
 
 export async function GET() {
