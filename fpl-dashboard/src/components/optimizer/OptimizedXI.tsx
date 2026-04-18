@@ -106,6 +106,33 @@ function SectionHeader({ label }: { label: string }) {
   );
 }
 
+function calcPredictedPoints(
+  starters: number[],
+  captainId: number,
+  playerMap: Map<number, Player>,
+  gwCount: number
+): number {
+  let total = 0;
+  for (const id of starters) {
+    const player = playerMap.get(id);
+    if (!player) continue;
+    const epNext = parseFloat(player.ep_next) || 0;
+    const formPerGW = parseFloat(player.form) || 0;
+    // First GW uses FPL's official ep_next; subsequent GWs use rolling form rate
+    const projected = epNext + formPerGW * Math.max(0, gwCount - 1);
+    let availFactor = 1.0;
+    if (player.status === "u") availFactor = 0;
+    else if (player.status === "i") availFactor = 0.1;
+    else if (player.status === "d") {
+      availFactor = player.chance_of_playing_next_round !== null
+        ? player.chance_of_playing_next_round / 100
+        : 0.5;
+    }
+    total += projected * availFactor * (id === captainId ? 2 : 1);
+  }
+  return total;
+}
+
 export function OptimizedXI() {
   const { picks, bootstrap, fixtures, gwRange, isLoading, setSelectedPlayerId } = useFPL();
   const optimized = useOptimizer(picks?.picks, bootstrap?.elements, fixtures, gwRange);
@@ -148,6 +175,20 @@ export function OptimizedXI() {
   ];
 
   const gainPositive = optimized.projectedGainVsCurrent >= 0;
+
+  const predictedPoints = calcPredictedPoints(
+    optimized.starters,
+    optimized.captain,
+    playerMap,
+    gwRange.length
+  );
+
+  const cap = playerMap.get(optimized.captain);
+  const vc = playerMap.get(optimized.viceCaptain);
+
+  const gwLabel = gwRange.length === 1
+    ? `GW${gwRange[0]}`
+    : `GW${gwRange[0]} – GW${gwRange[gwRange.length - 1]}`;
 
   function renderOptimizedPlayer(id: number) {
     const player = playerMap.get(id);
@@ -221,6 +262,39 @@ export function OptimizedXI() {
             {optimized.projectedGainVsCurrent.toFixed(1)} pts
           </div>
           {ViewToggle}
+        </div>
+      </div>
+
+      {/* FPL-style Predicted Points Card */}
+      <div className="relative overflow-hidden rounded-2xl border border-purple-500/30 shadow-xl"
+        style={{ background: "linear-gradient(160deg, #4f46e5 0%, #3730a3 40%, #1e1b4b 100%)" }}>
+        {/* Dot-grid texture overlay */}
+        <div className="absolute inset-0 opacity-[0.08]"
+          style={{ backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)", backgroundSize: "16px 16px" }} />
+        <div className="relative px-6 py-5 flex flex-col items-center gap-1 text-center">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-200">
+            Predicted Highest Points
+          </p>
+          <div className="flex items-end gap-1 leading-none my-1">
+            <span className="text-6xl font-black text-white tabular-nums tracking-tight">
+              {predictedPoints.toFixed(1)}
+            </span>
+            <span className="text-lg font-bold text-indigo-300 mb-2">pts</span>
+          </div>
+          <p className="text-xs font-semibold text-indigo-300">
+            {gwLabel} · {gwRange.length} GW horizon
+          </p>
+          <div className="mt-2 flex items-center justify-center gap-4 text-xs">
+            <div className="flex items-center gap-1.5">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-green-400 text-[9px] font-black text-white shadow">C</span>
+              <span className="text-indigo-200 font-medium">{cap?.web_name ?? "—"} <span className="text-indigo-400">(×2)</span></span>
+            </div>
+            <div className="w-px h-4 bg-indigo-500/40" />
+            <div className="flex items-center gap-1.5">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-yellow-400 text-[9px] font-black text-gray-800 shadow">V</span>
+              <span className="text-indigo-200 font-medium">{vc?.web_name ?? "—"}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -325,23 +399,15 @@ export function OptimizedXI() {
 
       {/* Captain note */}
       <div className="rounded-xl border border-fpl-border bg-fpl-panel p-3 text-xs text-fpl-text-secondary space-y-1">
-        {(() => {
-          const cap = playerMap.get(optimized.captain);
-          const vc = playerMap.get(optimized.viceCaptain);
-          return (
-            <>
-              <p>
-                <span className="text-yellow-400 font-semibold">C Captain:</span>{" "}
-                <span className="text-fpl-text-primary font-medium">{cap?.web_name ?? "?"}</span>
-                {" — "}highest projected score this week
-              </p>
-              <p>
-                <span className="text-yellow-600 font-semibold">V Vice:</span>{" "}
-                <span className="text-fpl-text-primary font-medium">{vc?.web_name ?? "?"}</span>
-              </p>
-            </>
-          );
-        })()}
+        <p>
+          <span className="text-yellow-400 font-semibold">C Captain:</span>{" "}
+          <span className="text-fpl-text-primary font-medium">{cap?.web_name ?? "?"}</span>
+          {" — "}highest projected score this week
+        </p>
+        <p>
+          <span className="text-yellow-600 font-semibold">V Vice:</span>{" "}
+          <span className="text-fpl-text-primary font-medium">{vc?.web_name ?? "?"}</span>
+        </p>
       </div>
     </div>
   );
