@@ -7,6 +7,7 @@ import { useOptimizer } from "@/hooks/useOptimizer";
 import { useTeamHistory } from "@/hooks/useTeamHistory";
 import { usePlayerSummaries } from "@/hooks/usePlayerSummaries";
 import { findBestXI } from "@/lib/engine/best-xi";
+import { teamFixtureCount } from "@/lib/engine/fixture-difficulty";
 import { cn } from "@/lib/utils/cn";
 import type { EntryHistory, Player, PlayerSummary } from "@/types/fpl";
 
@@ -43,7 +44,9 @@ function computeTrueBestPossible(
 function calcPerGWPrediction(
   starters: number[],
   captainId: number,
-  playerMap: Map<number, Player>
+  playerMap: Map<number, Player>,
+  fixtures: import("@/types/fpl").Fixture[],
+  gwRange: number[]
 ): number {
   let total = 0;
   for (const id of starters) {
@@ -53,7 +56,16 @@ function calcPerGWPrediction(
     let avail = p.chance_of_playing_next_round !== null ? p.chance_of_playing_next_round / 100 : 0.95;
     if (p.status === "u") avail = 0;
     else if (p.status === "i") avail = 0.1;
-    total += ep * avail * (id === captainId ? 2 : 1);
+
+    const fixtureCount = fixtures.length > 0 ? teamFixtureCount(p.team, fixtures, gwRange) : 1;
+    const expectedGames = Math.max(1, gwRange.length);
+    const fixtureScale = fixtureCount === 0
+      ? 0
+      : fixtureCount > expectedGames
+        ? 1 + (fixtureCount - expectedGames) * 0.80 / expectedGames
+        : fixtureCount / expectedGames;
+
+    total += ep * avail * fixtureScale * (id === captainId ? 2 : 1);
   }
   return total;
 }
@@ -257,7 +269,7 @@ export function GWHistoryPanel() {
   const allPlayersMap = bootstrap ? new Map(bootstrap.elements.map((p) => [p.id, p])) : new Map<number, Player>();
   const perGWPrediction =
     optimizer && bootstrap
-      ? calcPerGWPrediction(optimizer.starters, optimizer.captain, allPlayersMap)
+      ? calcPerGWPrediction(optimizer.starters, optimizer.captain, allPlayersMap, fixtures ?? [], gwRange ?? [])
       : null;
 
   const completedGWs = gwData.filter((d) => d.points > 0);

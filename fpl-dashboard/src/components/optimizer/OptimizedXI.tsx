@@ -12,7 +12,7 @@ import { Pitch } from "@/components/shared/Pitch";
 import { PitchPlayerCard } from "@/components/shared/PitchPlayerCard";
 import { POSITION_IDS, POSITION_NAMES } from "@/lib/utils/constants";
 import { scorePlayer } from "@/lib/engine/projected-points";
-import { getUpcomingFixtures, avgDifficulty } from "@/lib/engine/fixture-difficulty";
+import { getUpcomingFixtures, avgDifficulty, teamFixtureCount } from "@/lib/engine/fixture-difficulty";
 import { findBestXI } from "@/lib/engine/best-xi";
 import { cn } from "@/lib/utils/cn";
 import type { Player, Fixture, Pick } from "@/types/fpl";
@@ -127,12 +127,19 @@ function computeBestPredictedXI(
     const epNext = parseFloat(p.ep_next) || 0;
     const formPerGW = parseFloat(p.form) || 0;
     const avgFDR = fixtures.length > 0 ? avgDifficulty(p.team, fixtures, gwRange) : 3.0;
-    // Easy fixtures boost form, hard fixtures dampen it
     const fdrFactor = Math.min(2.0, 3.0 / Math.max(1, avgFDR));
-    // GW1: use ep_next; GW2+: use form * fdr per GW; then average across horizon
+
+    // DGW/BGW: scale expected pts by fixture count vs expected games
+    const fixtureCount = fixtures.length > 0 ? teamFixtureCount(p.team, fixtures, gwRange) : gwCount;
+    const fixtureScale = fixtureCount === 0
+      ? 0
+      : fixtureCount > gwCount
+        ? 1 + (fixtureCount - gwCount) * 0.80 / gwCount
+        : fixtureCount / gwCount;
+
     const totalPts = epNext + formPerGW * fdrFactor * Math.max(0, gwCount - 1);
 
-    return { id: pick.element, elementType: p.element_type, score: (totalPts / gwCount) * avail };
+    return { id: pick.element, elementType: p.element_type, score: (totalPts / gwCount) * avail * fixtureScale };
   });
 
   const result = findBestXI(playerScores);
@@ -213,8 +220,8 @@ export function OptimizedXI() {
         gwRange={gwRange}
         teams={bootstrap!.teams}
         teamShortName={bootstrap!.teams.find((t) => t.id === player.team)?.short_name}
-        isCaptain={optimized!.captain === id}
-        isViceCaptain={optimized!.viceCaptain === id}
+        isCaptain={predicted.captainId === id}
+        isViceCaptain={predicted.vcId === id}
         optimizerHighlight="start"
         onClick={() => setSelectedPlayerId(player.id)}
       />
@@ -368,8 +375,8 @@ export function OptimizedXI() {
                           fixtures={fixtures ?? []}
                           gwRange={gwRange ?? []}
                           teams={bootstrap.teams}
-                          isCaptain={optimized.captain === id}
-                          isViceCaptain={optimized.viceCaptain === id}
+                          isCaptain={predicted.captainId === id}
+                          isViceCaptain={predicted.vcId === id}
                           projectedScore={projected}
                           onClick={() => setSelectedPlayerId(player.id)}
                         />

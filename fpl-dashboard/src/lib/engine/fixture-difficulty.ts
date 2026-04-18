@@ -29,6 +29,25 @@ export function avgDifficulty(
 }
 
 /**
+ * Returns how many upcoming fixtures a team has within the given GW range.
+ * Used to detect DGW (count > gwRange.length) or BGW (count === 0).
+ */
+export function teamFixtureCount(
+  teamId: number,
+  fixtures: Fixture[],
+  gwRange: number[]
+): number {
+  const gwSet = new Set(gwRange);
+  return fixtures.filter(
+    (f) =>
+      f.event !== null &&
+      gwSet.has(f.event) &&
+      !f.finished &&
+      (f.team_h === teamId || f.team_a === teamId)
+  ).length;
+}
+
+/**
  * Returns upcoming fixture info for a team (for display in UI).
  */
 export interface UpcomingFixture {

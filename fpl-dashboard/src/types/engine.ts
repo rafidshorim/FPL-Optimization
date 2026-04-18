@@ -5,7 +5,9 @@ export interface EngineWeights {
   ictIndex: number;
   fixtureEase: number;
   minutesProbability: number;
-  xGI: number;
+  positionGoalBonus: number;  // xG/xA weighted by official position goal pts (GK=10,DEF=6,MID=5,FWD=4)
+  cleanSheetProb: number;     // CS probability × official CS pts (GK/DEF=4, MID=1, FWD=0)
+  defContribution: number;    // Defensive contribution proxy (bonus pts per start)
 }
 
 export interface ProjectedPoints {
@@ -18,7 +20,10 @@ export interface ProjectedPoints {
     ictContrib: number;
     fixtureContrib: number;
     minutesContrib: number;
-    xgiContrib: number;
+    positionGoalContrib: number;
+    cleanSheetContrib: number;
+    defContrib: number;
+    disciplinaryPenalty: number; // direct deduction (not a weight)
   };
 }
 
