@@ -12,9 +12,10 @@ import { Pitch } from "@/components/shared/Pitch";
 import { PitchPlayerCard } from "@/components/shared/PitchPlayerCard";
 import { POSITION_IDS, POSITION_NAMES } from "@/lib/utils/constants";
 import { scorePlayer } from "@/lib/engine/projected-points";
-import { getUpcomingFixtures } from "@/lib/engine/fixture-difficulty";
+import { getUpcomingFixtures, avgDifficulty } from "@/lib/engine/fixture-difficulty";
+import { findBestXI } from "@/lib/engine/best-xi";
 import { cn } from "@/lib/utils/cn";
-import type { Player, Fixture } from "@/types/fpl";
+import type { Player, Fixture, Pick } from "@/types/fpl";
 
 type Team = { id: number; short_name: string };
 
@@ -106,31 +107,44 @@ function SectionHeader({ label }: { label: string }) {
   );
 }
 
-function calcPredictedPoints(
-  starters: number[],
-  captainId: number,
+function computeBestPredictedXI(
+  allPicks: Pick[],
   playerMap: Map<number, Player>,
-  gwCount: number
-): number {
-  let total = 0;
-  for (const id of starters) {
-    const player = playerMap.get(id);
-    if (!player) continue;
-    const epNext = parseFloat(player.ep_next) || 0;
-    const formPerGW = parseFloat(player.form) || 0;
-    // First GW uses FPL's official ep_next; subsequent GWs use rolling form rate
-    const projected = epNext + formPerGW * Math.max(0, gwCount - 1);
-    let availFactor = 1.0;
-    if (player.status === "u") availFactor = 0;
-    else if (player.status === "i") availFactor = 0.1;
-    else if (player.status === "d") {
-      availFactor = player.chance_of_playing_next_round !== null
-        ? player.chance_of_playing_next_round / 100
-        : 0.5;
-    }
-    total += projected * availFactor * (id === captainId ? 2 : 1);
-  }
-  return total;
+  fixtures: Fixture[],
+  gwRange: number[]
+): { total: number; captainId: number; vcId: number; formation: string } {
+  const gwCount = Math.max(1, gwRange.length);
+
+  const playerScores = allPicks.map((pick) => {
+    const p = playerMap.get(pick.element);
+    if (!p) return { id: pick.element, elementType: 1, score: 0 };
+
+    let avail = 1.0;
+    if (p.status === "u") avail = 0;
+    else if (p.status === "i") avail = 0.1;
+    else if (p.status === "d") avail = (p.chance_of_playing_next_round ?? 50) / 100;
+
+    const epNext = parseFloat(p.ep_next) || 0;
+    const formPerGW = parseFloat(p.form) || 0;
+    const avgFDR = fixtures.length > 0 ? avgDifficulty(p.team, fixtures, gwRange) : 3.0;
+    // Easy fixtures boost form, hard fixtures dampen it
+    const fdrFactor = Math.min(2.0, 3.0 / Math.max(1, avgFDR));
+    // GW1: use ep_next; GW2+: use form * fdr per GW; then average across horizon
+    const totalPts = epNext + formPerGW * fdrFactor * Math.max(0, gwCount - 1);
+
+    return { id: pick.element, elementType: p.element_type, score: (totalPts / gwCount) * avail };
+  });
+
+  const result = findBestXI(playerScores);
+
+  // VC = 2nd highest scorer among the optimal starters
+  const starterSet = new Set(result.starterIds);
+  const sortedStarters = playerScores
+    .filter((ps) => starterSet.has(ps.id))
+    .sort((a, b) => b.score - a.score);
+  const vcId = sortedStarters[1]?.id ?? sortedStarters[0]?.id ?? -1;
+
+  return { total: result.totalWithCaptain, captainId: result.captainId, vcId, formation: result.formation };
 }
 
 export function OptimizedXI() {
@@ -176,15 +190,11 @@ export function OptimizedXI() {
 
   const gainPositive = optimized.projectedGainVsCurrent >= 0;
 
-  const predictedPoints = calcPredictedPoints(
-    optimized.starters,
-    optimized.captain,
-    playerMap,
-    gwRange.length
-  );
+  const predicted = computeBestPredictedXI(picks.picks, playerMap, fixtures ?? [], gwRange);
+  const predictedPoints = predicted.total;
 
-  const cap = playerMap.get(optimized.captain);
-  const vc = playerMap.get(optimized.viceCaptain);
+  const cap = playerMap.get(predicted.captainId) ?? playerMap.get(optimized.captain);
+  const vc = playerMap.get(predicted.vcId) ?? playerMap.get(optimized.viceCaptain);
 
   const gwLabel = gwRange.length === 1
     ? `GW${gwRange[0]}`
@@ -273,7 +283,7 @@ export function OptimizedXI() {
           style={{ backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)", backgroundSize: "16px 16px" }} />
         <div className="relative px-6 py-5 flex flex-col items-center gap-1 text-center">
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-200">
-            Predicted Highest Points
+            Predicted Avg Pts / GW
           </p>
           <div className="flex items-end gap-1 leading-none my-1">
             <span className="text-6xl font-black text-white tabular-nums tracking-tight">

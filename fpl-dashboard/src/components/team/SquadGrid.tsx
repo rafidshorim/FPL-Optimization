@@ -9,6 +9,7 @@ import { Spinner } from "@/components/shared/Spinner";
 import { useOptimizer } from "@/hooks/useOptimizer";
 import { POSITION_IDS, POSITION_NAMES } from "@/lib/utils/constants";
 import { Pitch } from "@/components/shared/Pitch";
+import { GWHistoryPanel } from "@/components/team/GWHistoryPanel";
 import { getUpcomingFixtures } from "@/lib/engine/fixture-difficulty";
 import { cn } from "@/lib/utils/cn";
 import type { Player, Fixture } from "@/types/fpl";
@@ -307,6 +308,9 @@ export function SquadGrid() {
           </div>
         </div>
       )}
+
+      {/* GW History + Analytics */}
+      <GWHistoryPanel />
 
       {/* Optimizer nudge */}
       {optimizer && Math.abs(optimizer.projectedGainVsCurrent) > 0.1 && (
